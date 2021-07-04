@@ -7,6 +7,7 @@ This article is aimed to explain how to write a simple Memory Allocator for a Vu
 With Vulkan, you can allocate memory on the GPU using the **[vkAllocateMemory](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkAllocateMemory.html)** function. This function will allocate a certain amount of **[a certain type of memory](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkMemoryType.html)** and will **decrease the number of allocations your GPU driver allows you to do**.
 
 ![Maximum number of memory allocations for a Nvidia GeForce GTX 1060 6GB (driver version 471.22.0.0)](https://i.imgur.com/vdR2yIV.png)
+
 <sub>Maximum number of memory allocations for a Nvidia GeForce GTX 1060 6GB (driver version 471.22.0.0) - [vulkan.gpuinfo.org](https://vulkan.gpuinfo.org)</sub>
 
 If you reach the maximum number of allocations by calling vkAllocateMemory too many times, your application won't be able to allocate any more device memory. That can happen if you decide to allocate device memory each time you want to load an image or a buffer. For example, if we want to load an object with a mesh and metallic-roughness PBR workflow with a diffuse map, a normal map, a metallic map, a roughness map, an occlusion map and an emissive map, we would have 1 buffer and 6 images. If we allocate memory once per resource, **that would make us allocate 7 times to load a single object**. If we have 4096 possible maximum allocations, that would mean that **we would only be able to load 585 objects, not counting uniform buffer objects and render targets**.
@@ -21,11 +22,14 @@ This allocator is the one used in **[NeigeEngine](https://github.com/ZaOniRinku/
 ### Global principles
  There are 3 levels : the **Memory Allocator** itself, which contains a vector of chunks. A **Chunk** is an allocation with **vkAllocateMemory**, by default, its size will be 256MB and contains a doubly linked list of blocks. A **Block** is an image or buffer memory inside a chunk.
 
-![The structure of this memory allocator](https://i.imgur.com/oWwb7kb.png)<sub>The structure of this memory allocator</sub>
+![The structure of this memory allocator](https://i.imgur.com/oWwb7kb.png)
+
+<sub>The structure of this memory allocator</sub>
 
 The doubly linked list allows for **an easy way to add and remove elements in the list**. When we allocate a new image or buffer, we want **to subdivide a block into two blocks**: one that is going to be used to represent the allocated resource, and a new block that represents the remaining memory of the previous block.
 
 ![Block subvision](https://i.imgur.com/5aMbAW9.png)
+
 <sub>Block subvision</sub>
 
 When we want to deallocate a resource, we just change the flag **inUse** from *true* to *false*, then we check if the previous block is in use, if it's not, we fuse them together, taking the minimum offset and adding the sizes. We also do the same thing for the next block. It's also important to take care on how we re-link the blocks.
@@ -120,6 +124,7 @@ int32_t findProperties(const VkPhysicalDeviceMemoryProperties* pMemoryProperties
     return -1;
 }
 ```
+
 <sub>Function written by Kronos Group - https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html</sub>
 
 **The allocate functions are the ones the rendered needs to call when it needs to allocate memory for an image or a buffer**. It is iterating through the chunk's list to find a chunk with the right memory type and a block with enough memory to put the resource we want to allocate. If it does not find a single chunk that fills these requirements, it creates a new one. It then binds  the resource to the chunk.
@@ -169,7 +174,9 @@ This function allocates images but allocating buffers is the exact same thing, y
 The deallocate function uses some information contain in the MemoryInfo structure. The goal is to access the right block in the right chunk as quick as possible. It is indeed possible to use less information and still be able to find the right block, but that would mean to look at every chunk with the right type and iterate through the entire block doubly linked list to find the right block.
 When the right block has been found, we need to put the **inUse boolean to false**, check if the previous block is in use and if it's not, fuse them. Then do the same with the next block.
 
-![A deallocation](https://i.imgur.com/R3bKViT.png)<sub>A deallocation</sub>
+![A deallocation](https://i.imgur.com/R3bKViT.png)
+
+<sub>A deallocation</sub>
 
 ```CPP
 void MemoryAllocator::deallocate(VkDeviceSize chunkId, VkDeviceSize allocationId) {

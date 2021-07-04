@@ -5,17 +5,21 @@ To fix synchronization issues, the first step is obviously to find them. Some of
 The easiest way to detect synchronization hazards is to use the **[VK_LAYER_KHRONOS_synchronization2](https://vulkan.lunarg.com/doc/view/1.2.170.0/windows/synchronization2_layer.html)** layer, which can be activated from **Vulkan Configurator** (vkconfig), a software shipped with the Vulkan SDK.
 **Note:** It's not recommended to let this layer activated all the time as it destroys performance.
 ![VK_LAYER_KHRONOS_synchronization2 from Vulkan Configurator](https://i.imgur.com/iOYLxR4.png)
+
 <sub>Activating VK_LAYER_KHRONOS_synchronization2 from Vulkan Configurator</sub>
 
 This layer will show messages about different types of synchronization errors, even some unrelated to render passes synchronization like compute passes synchronization, etc..
 **Note:** The layer only shows a limited number of messages. You may also see the same message multiple times.
 ### Understanding the messages
-![Example of a validation message](https://i.imgur.com/UOJRDg8.png)<sub>A Write-after-write hazard on render pass 0x1a8aa6cf148</sub>
+![Example of a validation message](https://i.imgur.com/UOJRDg8.png)
+
+<sub>A Write-after-write hazard on render pass 0x1a8aa6cf148</sub>
 
 The interesting messages for this article are the ones with **type = VK_OBJECT_TYPE_RENDER_PASS**. Those are the ones that concern render passes. **handle = 0xhexcode** is the handle of the render pass presenting an synchronization issue. To find the right render pass, you can either use a debugger to try and find the render pass with the same hexadecimal value or use **[VK_EXT_debug_utils](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_EXT_debug_utils.html)** to name your Vulkan objects in validation messages. 
 This specific message says that for render pass 0x1a8aa6cf148, in the first subpass (subpass 0) and for the first attachment, which is a color attachment, the layout transition (from initialLayout to finalLayout) specified in the **[VkAttachmentDescription](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAttachmentDescription.html)** structure for this specific attachment happens before the clear (loadOp), also specified in the same structure. Layout transitions and clears are write operations and must be executed in the right order (clear first, then transition the layout).
 ## Fixing the subpass dependencies
 ![The VkSubpassDependency structure](https://i.imgur.com/LmxN4t8.png)
+
 <sub>The [VkSubpassDependency](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSubpassDependency.html) structure</sub>
 
 The goals of fixing subpass dependencies are:
@@ -52,6 +56,7 @@ To fill these structures, it's good to have a complete overview of what's going 
 ### Pipeline stage and access mask compatibility
 If you put a pipeline stage in **srcStageMask**, then the access in **srcAccessMask** must be compatible with it. This compatibility chart comes from **[Syncmaster 3000](http://s9w.io/syncmaster/)**:
 ![Pipeline stage and access compatibility chart](https://i.imgur.com/WTdLXuv.png)
+
 <sub>Pipeline stage and access compatibility chart, green means compatible, red means not compatible</sub>
 ### Example
 Let's take a practical example:
